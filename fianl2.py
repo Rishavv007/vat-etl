@@ -4,11 +4,8 @@ import numpy as np
 import re, unicodedata, io, sqlite3
 from datetime import datetime
 
-# -----------------------
-# CONFIGURATION
-# -----------------------
 
-# 🔁 Updated mapping: FTA Box → Letter (A, B, C, D)
+# updated mapping
 BOX_MAPPING = {
     "Box 1": "Box A",
     "Box 4": "Box B",
@@ -23,7 +20,7 @@ BOX_DESCRIPTIONS = {
     "Box D": "Net VAT Payable (BoxA_VAT - BoxC_VAT)"
 }
 
-# ✅ Explicit Feb-to-Jan header mapping
+# explicit mapping
 EXACT_HEADER_MAP = {
     "Supply Type": "Supply Type",
     "#": "Invoice Number",
@@ -36,10 +33,7 @@ EXACT_HEADER_MAP = {
     "Box": "Box",
 }
 
-# -----------------------
-# HELPERS
-# -----------------------
-
+#helpers
 def normalize_header(h):
     if h is None:
         return ""
@@ -70,15 +64,11 @@ def detect_header_row(df):
         if match_score >= 2:
             return i
     return 0
-
-# -----------------------
-# PROCESS SHEET
-# -----------------------
-
+#process sheet
 def process_sheet(xls, sheet_name, vat_rate_pct=5.0):
     st.write(f"📄 Reading Sheet: {sheet_name}")
 
-    # Read sheet to find header
+    # read sheet to find header
     df_raw = pd.read_excel(xls, sheet_name=sheet_name, header=None, dtype=object)
     header_row = detect_header_row(df_raw)
     df = pd.read_excel(xls, sheet_name=sheet_name, header=header_row, dtype=object)
@@ -86,15 +76,15 @@ def process_sheet(xls, sheet_name, vat_rate_pct=5.0):
     st.write(f"🧭 Detected header row: {header_row + 1}")
     st.write(f"Detected Columns: {list(df.columns)}")
 
-    # Normalize headers
+    # normalize headers
     df.columns = [normalize_header(c) for c in df.columns]
 
-    # Apply known mappings (Feb → Jan)
+    # apply known mappings 
     for col in df.columns:
         if col in EXACT_HEADER_MAP:
             df = df.rename(columns={col: EXACT_HEADER_MAP[col]})
 
-    # Ensure all columns exist
+    # ensure all columns exist
     expected_cols = [
         "Supply Type", "Invoice Number", "Date", "Customer/supplier Name",
         "Supply/Purchase Value", "VAT Value", "Invoice Value", "Recoverable", "Box"
@@ -103,7 +93,7 @@ def process_sheet(xls, sheet_name, vat_rate_pct=5.0):
         if col not in df.columns:
             df[col] = np.nan
 
-    # Clean numeric and date values
+    # clean numeric and date values
     df["Supply/Purchase Value"] = df["Supply/Purchase Value"].apply(parse_number)
     df["VAT Value"] = df["VAT Value"].apply(parse_number)
     df["Invoice Value"] = df["Invoice Value"].apply(parse_number)
@@ -117,16 +107,13 @@ def process_sheet(xls, sheet_name, vat_rate_pct=5.0):
     st.dataframe(df.head(8))
     return df
 
-# -----------------------
-# SUMMARY GENERATION
-# -----------------------
-
+#calculate summary
 def calculate_summary(df_all):
     results = []
     for m in sorted(df_all["Month"].dropna().unique()):
         sub = df_all[df_all["Month"] == m]
 
-        # Compute box-wise totals
+        # compute box-wise totals
         boxA = sub[sub["Box"].astype(str).str.contains("A", case=False, na=False)]
         boxB = sub[sub["Box"].astype(str).str.contains("B", case=False, na=False)]
         boxC = sub[sub["Box"].astype(str).str.contains("C", case=False, na=False)]
@@ -144,11 +131,7 @@ def calculate_summary(df_all):
         ])
 
     return pd.DataFrame(results).round(2)
-
-# -----------------------
-# STREAMLIT APP
-# -----------------------
-
+#streamlit app
 def main():
     st.set_page_config(page_title="VAT Summary (Box A–D)", layout="wide")
     st.title("📊 UAE VAT Summary — Box A, B, C, D Format")
@@ -181,7 +164,7 @@ def main():
     st.subheader("📅 Monthly VAT Summary (Boxes A–D)")
     st.dataframe(summary)
 
-    # Export Excel
+    # export to Excel
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
         summary.to_excel(writer, sheet_name="VAT_Summary", index=False)
@@ -193,7 +176,7 @@ def main():
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-    # Save to SQLite
+    # save to SQLite
     try:
         conn = sqlite3.connect("vat_summary.db")
         summary.to_sql("vat_summary", conn, if_exists="replace", index=False)
