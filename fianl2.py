@@ -66,14 +66,14 @@ def detect_header_row(df):
     return 0
 #process sheet
 def process_sheet(xls, sheet_name, vat_rate_pct=5.0):
-    st.write(f"📄 Reading Sheet: {sheet_name}")
+    st.write(f" Reading Sheet: {sheet_name}")
 
     # read sheet to find header
     df_raw = pd.read_excel(xls, sheet_name=sheet_name, header=None, dtype=object)
     header_row = detect_header_row(df_raw)
     df = pd.read_excel(xls, sheet_name=sheet_name, header=header_row, dtype=object)
 
-    st.write(f"🧭 Detected header row: {header_row + 1}")
+    st.write(f"Detected header row: {header_row + 1}")
     st.write(f"Detected Columns: {list(df.columns)}")
 
     # normalize headers
@@ -103,7 +103,7 @@ def process_sheet(xls, sheet_name, vat_rate_pct=5.0):
     # Keep original Box letter for reference
     df["BoxLetter"] = df["Box"].astype(str).str.upper().str.replace("BOX", "").str.strip().str[0]
 
-    st.success(f"✅ Processed {len(df)} rows from {sheet_name}")
+    st.success(f"Processed {len(df)} rows from {sheet_name}")
     st.dataframe(df.head(8))
     return df
 
@@ -152,7 +152,7 @@ def main():
             df = process_sheet(xls, sheet, vat_rate_pct=vat_rate)
             all_data.append(df)
         except Exception as e:
-            st.error(f"❌ Error processing {sheet}: {e}")
+            st.error(f"Error processing {sheet}: {e}")
 
     if not all_data:
         st.error("No sheets processed.")
@@ -161,7 +161,7 @@ def main():
     df_all = pd.concat(all_data, ignore_index=True)
     summary = calculate_summary(df_all)
 
-    st.subheader("📅 Monthly VAT Summary (Boxes A–D)")
+    st.subheader("Monthly VAT Summary (Boxes A–D)")
     st.dataframe(summary)
 
     # export to Excel
@@ -182,7 +182,7 @@ def main():
         summary.to_sql("vat_summary", conn, if_exists="replace", index=False)
         conn.close()
     except Exception as e:
-        st.warning(f"⚠️ Could not save to SQLite: {e}")
+        st.warning(f"Could not save to SQLite: {e}")
 
 if __name__ == "__main__":
     main()
