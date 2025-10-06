@@ -4,8 +4,49 @@ import numpy as np
 import re, unicodedata, io, sqlite3
 from datetime import datetime
 
+ #currency rates
+CURRENCY_RATES = {
+    "AED": 1.00,
+    "د.إ": 1.00,
+    "USD": 3.67,
+    "$": 3.67,
+    "EUR": 3.98,
+    "€": 3.98,
+    "GBP": 4.62,
+    "£": 4.62,
+    "SAR": 0.98,
+    "ر.س": 0.98,
+    "INR": 0.044,
+    "₹": 0.044
+}
 
-# updated mapping
+def detect_and_convert_currency(value):
+    """Detect currency symbols or codes and convert to AED."""
+    if pd.isna(value):
+        return 0.0
+    text = str(value).strip()
+    detected_currency = "AED"
+
+    # identify currency symbol or code
+    for symbol in CURRENCY_RATES.keys():
+        if symbol in text:
+            detected_currency = symbol
+            break
+
+    # remove all non-numeric except ., -, ()
+    clean_text = re.sub(r"[^\d\.\-\(\)]", "", text)
+    if clean_text.startswith("(") and clean_text.endswith(")"):
+        clean_text = "-" + clean_text[1:-1]
+
+    try:
+        num = float(clean_text)
+    except ValueError:
+        num = 0.0
+
+    rate = CURRENCY_RATES.get(detected_currency, 1.0)
+    return round(num * rate, 2)
+
+#box mapping
 BOX_MAPPING = {
     "Box 1": "Box A",
     "Box 4": "Box B",
@@ -20,7 +61,7 @@ BOX_DESCRIPTIONS = {
     "Box D": "Net VAT Payable (BoxA_VAT - BoxC_VAT)"
 }
 
-# explicit mapping
+# explicit header mapping
 EXACT_HEADER_MAP = {
     "Supply Type": "Supply Type",
     "#": "Invoice Number",
@@ -33,7 +74,7 @@ EXACT_HEADER_MAP = {
     "Box": "Box",
 }
 
-#helpers
+# helpers
 def normalize_header(h):
     if h is None:
         return ""
@@ -64,9 +105,10 @@ def detect_header_row(df):
         if match_score >= 2:
             return i
     return 0
-#process sheet
+
+# process each sheet
 def process_sheet(xls, sheet_name, vat_rate_pct=5.0):
-    st.write(f" Reading Sheet: {sheet_name}")
+    st.write(f"Reading Sheet: {sheet_name}")
 
     # read sheet to find header
     df_raw = pd.read_excel(xls, sheet_name=sheet_name, header=None, dtype=object)
@@ -93,21 +135,23 @@ def process_sheet(xls, sheet_name, vat_rate_pct=5.0):
         if col not in df.columns:
             df[col] = np.nan
 
-    # clean numeric and date values
-    df["Supply/Purchase Value"] = df["Supply/Purchase Value"].apply(parse_number)
-    df["VAT Value"] = df["VAT Value"].apply(parse_number)
-    df["Invoice Value"] = df["Invoice Value"].apply(parse_number)
+    # clean numeric values + detect currencies
+    df["Supply/Purchase Value"] = df["Supply/Purchase Value"].apply(detect_and_convert_currency)
+    df["VAT Value"] = df["VAT Value"].apply(detect_and_convert_currency)
+    df["Invoice Value"] = df["Invoice Value"].apply(detect_and_convert_currency)
+
+    # convert dates
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
     df["Month"] = df["Date"].dt.strftime("%b").fillna(sheet_name)
 
-    # Keep original Box letter for reference
+    # keep original Box letter for reference
     df["BoxLetter"] = df["Box"].astype(str).str.upper().str.replace("BOX", "").str.strip().str[0]
 
     st.success(f"Processed {len(df)} rows from {sheet_name}")
     st.dataframe(df.head(8))
     return df
 
-#calculate summary
+# calculate monthly summary
 def calculate_summary(df_all):
     results = []
     for m in sorted(df_all["Month"].dropna().unique()):
@@ -131,13 +175,17 @@ def calculate_summary(df_all):
         ])
 
     return pd.DataFrame(results).round(2)
-#streamlit app
+
+# streamlit app
 def main():
     st.set_page_config(page_title="VAT Summary (Box A–D)", layout="wide")
-    st.title("📊 UAE VAT Summary — Box A, B, C, D Format")
+    st.title("VAT Summary — Box A, B, C, D Format (All Values in AED)")
 
-    uploaded = st.file_uploader("📂 Upload Excel workbook", type=["xlsx"])
+    uploaded = st.file_uploader(" Upload Excel workbook", type=["xlsx"])
     vat_rate = st.sidebar.number_input("📈 VAT Rate (%)", 0.0, 20.0, 5.0, 0.5)
+
+    st.sidebar.subheader("💱 Currency Conversion Rates")
+    st.sidebar.json(CURRENCY_RATES)
 
     if not uploaded:
         st.info("Please upload a workbook with Jan, Feb, etc.")
@@ -152,7 +200,7 @@ def main():
             df = process_sheet(xls, sheet, vat_rate_pct=vat_rate)
             all_data.append(df)
         except Exception as e:
-            st.error(f"Error processing {sheet}: {e}")
+            st.error(f"❌ Error processing {sheet}: {e}")
 
     if not all_data:
         st.error("No sheets processed.")
@@ -161,7 +209,7 @@ def main():
     df_all = pd.concat(all_data, ignore_index=True)
     summary = calculate_summary(df_all)
 
-    st.subheader("Monthly VAT Summary (Boxes A–D)")
+    st.subheader("Monthly VAT Summary (Boxes A–D in AED)")
     st.dataframe(summary)
 
     # export to Excel
@@ -172,7 +220,7 @@ def main():
     st.download_button(
         label="📥 Download VAT Summary (Excel)",
         data=output.getvalue(),
-        file_name=f"vat_summary_AtoD_{datetime.now():%Y%m%d_%H%M%S}.xlsx",
+        file_name=f"vat_summary_AtoD_AED_{datetime.now():%Y%m%d_%H%M%S}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
