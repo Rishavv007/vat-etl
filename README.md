@@ -45,9 +45,9 @@ streamlit run fianl2.py
 
 ```
 vat-etl/
-├── fianl2.py           # Main application file
+├── fianl2.py           # Main file
 ├── requirements.txt     # Python dependencies
-├── vat_summary.db      # SQLite database (auto-generated)
+├── vat_summary.db      # SQLite db
 └── README.md          # Project documentation
 ```
 
